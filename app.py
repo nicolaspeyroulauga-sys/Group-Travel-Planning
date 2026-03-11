@@ -1,73 +1,53 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
+import os
+from datetime import datetime
 
-# --- CONFIG ---
-st.set_page_config(page_title="Consensus Travel", page_icon="✈️", layout="wide")
+# --- FILE SETUP ---
+DATA_FILE = "group_data.csv"
 
-def create_google_flights_link(origin, dest, start_date, end_date):
-    """Generates a functional Google Flights URL"""
-    # Format: YYYY-MM-DD
-    start = start_date.strftime('%Y-%m-%d')
-    end = end_date.strftime('%Y-%m-%d')
-    # Google's deep link structure
-    url = f"https://www.google.com/travel/flights?q=Flights%20to%20{dest}%20from%20{origin}%20on%20{start}%20through%20{end}"
-    return url
+# Create file if it doesn't exist
+if not os.path.exists(DATA_FILE):
+    df = pd.DataFrame(columns=["Name", "Origin", "Budget", "Start", "End", "Style", "No_Go"])
+    df.to_csv(DATA_FILE, index=False)
 
-# --- UI ---
-st.title("🌍 Consensus: The Group Trip Decider")
-st.markdown("Find the overlap, lock the dates, and get everyone booked.")
+st.title("🏝️ The Consensus Hub")
 
-# 1. THE SHARED CONSTRAINTS
-st.header("1. Trip Essentials")
-col1, col2 = st.columns(2)
-with col1:
-    destination_city = st.text_input("Where are we going?", value="Lisbon")
-with col2:
-    # Default to a Friday-Monday trip 3 months from now
-    default_start = datetime.now() + timedelta(days=90)
-    trip_dates = st.date_input("When is the trip?", [default_start, default_start + timedelta(days=3)])
-
-# 2. THE GROUP DATA
-st.header("2. Who's Coming?")
-if 'travelers' not in st.session_state:
-    st.session_state.travelers = []
-
-with st.form("add_traveler"):
-    t_name = st.text_input("Name")
-    t_origin = st.text_input("Flying From (City or Airport Code)")
-    t_budget = st.number_input("Max Budget ($)", value=500)
-    add_btn = st.form_submit_button("Add to Group")
-    
-    if add_btn and t_name and t_origin:
-        st.session_state.travelers.append({"name": t_name, "origin": t_origin, "budget": t_budget})
-
-# 3. THE GENERATOR
-if st.session_state.travelers:
-    st.divider()
-    st.header("3. The Booking Hub")
-    st.info(f"Targeting {destination_city} from {trip_dates[0]} to {trip_dates[1]}")
-    
-    # Display individual booking buttons
-    for traveler in st.session_state.travelers:
-        c_name, c_link = st.columns([1, 2])
+# --- STEP 1: INDIVIDUAL INPUT ---
+with st.expander("📝 Step 1: Fill Your Travel Profile", expanded=True):
+    with st.form("friend_form", clear_on_submit=True):
+        name = st.text_input("Your Name")
+        origin = st.text_input("Departure City (e.g. LHR)")
+        budget = st.slider("Max Budget ($)", 200, 2000, 500)
         
-        with c_name:
-            st.write(f"**{traveler['name']}** ({traveler['origin']})")
-        
-        with c_link:
-            # Generate the personalized link
-            flight_url = create_google_flights_link(
-                traveler['origin'], 
-                destination_city, 
-                trip_dates[0], 
-                trip_dates[1]
-            )
-            st.link_button(f"Book Flight for {traveler['name']}", flight_url)
+        col1, col2 = st.columns(2)
+        with col1:
+            start_date = st.date_input("Earliest Departure")
+        with col2:
+            end_date = st.date_input("Latest Return")
             
-    # Clear group button
-    if st.button("Reset Group"):
-        st.session_state.travelers = []
-        st.rerun()
-else:
-    st.write("Add travelers above to generate the booking dashboard.")
+        style = st.multiselect("What's your vibe?", 
+                              ["Exotic/Luxury", "Camping/Nature", "Road Trip", "City Break", "Party/Nightlife"])
+        
+        no_go = st.text_area("What do you NOT want to do? (e.g. 'No hiking', 'No cold weather')")
+        
+        submitted = st.form_submit_button("Submit to Group")
+        
+        if submitted:
+            # Append data to CSV
+            new_data = pd.DataFrame([[name, origin, budget, start_date, end_date, ", ".join(style), no_go]], 
+                                    columns=["Name", "Origin", "Budget", "Start", "End", "Style", "No_Go"])
+            new_data.to_csv(DATA_FILE, mode='a', header=False, index=False)
+            st.success(f"Got it, {name}! Your preferences are locked in.")
+
+# --- STEP 2: THE SUMMARY (FOR YOU) ---
+st.divider()
+if st.checkbox("Show Group Status (Admin Only)"):
+    df_group = pd.read_csv(DATA_FILE)
+    st.write(f"### Current RSVPs: {len(df_group)}")
+    st.dataframe(df_group)
+    
+    # Simple Analysis: Budget Cap
+    if not df_group.empty:
+        cap = df_group["Budget"].min()
+        st.warning(f"⚠️ Group Budget Limit: ${cap} (Based on {df_group.loc[df_group['Budget'].idxmin(), 'Name']}'s limit)")
