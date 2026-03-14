@@ -1,50 +1,77 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import os
-from datetime import datetime, timedelta
+from streamlit_calendar import calendar
 
 # --- CONFIG ---
 st.set_page_config(page_title="Consensus Travel", layout="wide")
 DATA_FILE = "trip_data.csv"
 
-# Initialize the CSV file if it doesn't exist
+# Initialize file
 if not os.path.exists(DATA_FILE):
-    df_init = pd.DataFrame(columns=["Name", "Origin", "Budget", "Vibe", "Dates", "No-Go"])
-    df_init.to_csv(DATA_FILE, index=False)
+    pd.DataFrame(columns=["Name", "Origin", "Budget", "Vibe", "Dates", "No-Go"]).to_csv(DATA_FILE, index=False)
 
-# --- APP INTERFACE ---
-st.title("✈️ Consensus: The All-In-One Planner")
-st.markdown("Enter your details below. No external accounts required.")
+# Session State for interactive date selection
+if 'selected_dates' not in st.session_state:
+    st.session_state.selected_dates = []
+
+st.title("✈️ Consensus: Interactive Planner")
 
 # --- SECTION 1: USER INPUT ---
-with st.container():
-    st.header("1. Your Profile")
-    with st.form("travel_form", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            name = st.text_input("Name")
-            origin = st.text_input("Departure City")
-            budget = st.number_input("Max Budget ($)", min_value=0, value=500)
-        with col2:
-            vibe = st.selectbox("Vibe", ["City Break", "Nature", "Luxury", "Party", "Road Trip"])
-            # Calendar Logic
-            base = datetime.today()
-            date_opts = [(base + timedelta(days=x)).strftime("%Y-%m-%d") for x in range(60)]
-            available_dates = st.multiselect("Days you are free", options=date_opts)
-            
-        no_go = st.text_input("Anything you hate? (e.g. No hiking)")
-        submit = st.form_submit_button("Add me to the Group")
+st.header("1. Your Profile")
 
-        if submit:
-            if name and available_dates:
-                # Save to Local CSV
-                new_row = pd.DataFrame([[name, origin, budget, vibe, ",".join(available_dates), no_go]], 
-                                        columns=["Name", "Origin", "Budget", "Vibe", "Dates", "No-Go"])
-                new_row.to_csv(DATA_FILE, mode='a', header=False, index=False)
-                st.success(f"Added {name}! The file '{DATA_FILE}' has been updated.")
+with st.container(border=True):
+    col_form, col_cal = st.columns([1, 1])
+    
+    with col_form:
+        name = st.text_input("Name")
+        origin = st.text_input("Departure City")
+        budget = st.number_input("Max Budget ($)", min_value=0, value=500)
+        vibe = st.selectbox("Vibe", ["City Break", "Nature", "Luxury", "Party", "Road Trip"])
+        no_go = st.text_input("Anything you hate? (e.g. No hiking)")
+
+    with col_cal:
+        st.write("📅 **Click dates to toggle availability:**")
+        
+        # Calendar Configuration
+        calendar_options = {
+            "initialView": "dayGridMonth",
+            "selectable": True,
+            "headerToolbar": {"left": "prev,next", "center": "title", "right": ""},
+        }
+        
+        # Convert selected dates into "events" to highlight them on the calendar
+        calendar_events = [
+            {"title": "✅", "start": d, "end": d, "allDay": True, "backgroundColor": "#00FF00"} 
+            for d in st.session_state.selected_dates
+        ]
+        
+        state = calendar(events=calendar_events, options=calendar_options, key="trip_cal")
+        
+        # Logic to add/remove dates when clicked
+        if state.get("dateClick"):
+            clicked_date = state["dateClick"]["date"].split("T")[0]
+            if clicked_date in st.session_state.selected_dates:
+                st.session_state.selected_dates.remove(clicked_date)
             else:
-                st.error("Name and Dates are required!")
+                st.session_state.selected_dates.append(clicked_date)
+            st.rerun()
+
+        st.write(f"Selected: {', '.join(st.session_state.selected_dates) if st.session_state.selected_dates else 'None'}")
+
+    if st.button("Add me to the Group", type="primary", use_container_width=True):
+        if name and st.session_state.selected_dates:
+            new_row = pd.DataFrame([[
+                name, origin, budget, vibe, 
+                ",".join(st.session_state.selected_dates), no_go
+            ]], columns=["Name", "Origin", "Budget", "Vibe", "Dates", "No-Go"])
+            
+            new_row.to_csv(DATA_FILE, mode='a', header=False, index=False)
+            st.session_state.selected_dates = [] # Clear for next person
+            st.success(f"Successfully added {name}!")
+            st.rerun()
+        else:
+            st.warning("Please enter your name and select at least one date on the calendar.")
 
 st.divider()
 
@@ -54,43 +81,16 @@ admin_key = st.text_input("Password", type="password")
 
 if admin_key == "nicolas2026":
     df = pd.read_csv(DATA_FILE)
-    
-    if len(df) > 0:
-        tab1, tab2 = st.tabs(["📊 Analytics", "📅 Common Dates"])
+    if not df.empty:
+        st.write("### Current Group Data")
+        st.dataframe(df, use_container_width=True)
         
-        with tab1:
-            # Vibe Chart
-            fig = px.pie(df, names='Vibe', title="Group Vibe", hole=0.3)
-            st.plotly_chart(fig)
-            
-            # Constraints
-            st.metric("Group Budget Cap", f"${df['Budget'].min()}")
-            st.write("**Group Dealbreakers:**")
-            for ng in df['No-Go'].dropna():
-                if ng: st.write(f"• {ng}")
-
-        with tab2:
-            # Find the Overlap
-            # Convert strings back to sets of dates
-            all_date_sets = [set(str(d).split(",")) for d in df['Dates']]
-            common = set.intersection(*all_date_sets)
-            
-            if common:
-                st.success(f"Found {len(common)} overlapping days!")
-                st.write(sorted(list(common)))
-                
-                # Dynamic Link Generator
-                top_vibe = df['Vibe'].mode()[0]
-                sample_date = sorted(list(common))[0]
-                st.write("### Quick Flight Check")
-                for i, row in df.iterrows():
-                    link = f"https://www.google.com/search?q=flights+from+{row['Origin']}+on+{sample_date}"
-                    st.link_button(f"Search for {row['Name']}", link)
-            else:
-                st.error("No dates overlap for everyone yet.")
+        # Find Overlap
+        all_date_sets = [set(str(d).split(",")) for d in df['Dates']]
+        common = set.intersection(*all_date_sets)
         
-        if st.button("Reset Everything (Delete Data)"):
-            os.remove(DATA_FILE)
-            st.rerun()
-    else:
-        st.info("No data yet. Fill out the form above.")
+        if common:
+            st.balloons()
+            st.success(f"🔥 Found {len(common)} common days: {', '.join(sorted(list(common)))}")
+        else:
+            st.error("No overlap found yet. Everyone is too busy!")
