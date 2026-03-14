@@ -2,11 +2,10 @@ import streamlit as st
 import pandas as pd
 import os
 from streamlit_calendar import calendar
-from datetime import datetime
 
 # --- CONFIG & DATA ---
 st.set_page_config(page_title="Consensus Travel", layout="wide")
-DATA_FILE = "trip_data_v5.csv"
+DATA_FILE = "trip_data_v6.csv"
 
 VIBE_OPTIONS = [
     "City Break 🏙️", "Nature & Hiking 🌲", "Luxury & Spa 💎", 
@@ -20,120 +19,120 @@ if not os.path.exists(DATA_FILE):
 if 'selected_dates' not in st.session_state:
     st.session_state.selected_dates = set()
 
-st.title("✈️ Consensus: The Ultimate Group Architect")
+# --- SECTION 1 (STATIC PER YOUR REQUEST) ---
+st.title("✈️ Consensus: Automated Group Strategist")
 
-# --- SECTION 1: USER ENTRY ---
 col_form, col_cal = st.columns([1, 1.2], gap="large")
-
 with col_form:
     st.header("1. Profile & Vibes")
     with st.container(border=True):
         name = st.text_input("Full Name")
         origin = st.text_input("Departure City")
-        budget = st.number_input("Max Budget ($)", min_value=0, value=800)
-        
-        st.write("### ⭐️ Rate Trip Styles")
-        vibe_scores = {}
-        for v in VIBE_OPTIONS:
-            vibe_scores[v] = st.select_slider(f"{v}", options=[1, 2, 3, 4, 5], value=3)
-        
-        no_go = st.text_input("Any Dealbreakers?")
+        budget = st.number_input("Max Budget (€)", min_value=0, value=500)
+        vibe_scores = {v: st.select_slider(f"{v}", options=[1, 2, 3, 4, 5], value=3) for v in VIBE_OPTIONS}
+        no_go = st.text_input("Dealbreakers (e.g., camping car)")
 
 with col_cal:
     st.header("2. Availability")
-    st.info("Click a date, then click 'Sync' to confirm. (Fixes the 1-day offset bug)")
-    
-    cal_options = {
-        "initialView": "dayGridMonth",
-        "selectable": True,
-        "timeZone": "UTC", # Force UTC to prevent local shifting
-    }
-    
-    calendar_events = [
-        {"start": d, "end": d, "display": "background", "color": "#28a745"} 
-        for d in st.session_state.selected_dates
-    ]
-    
-    state = calendar(events=calendar_events, options=cal_options, key="trip_cal_v5")
+    cal_options = {"initialView": "dayGridMonth", "selectable": True, "timeZone": "UTC"}
+    events = [{"start": d, "end": d, "display": "background", "color": "#28a745"} for d in st.session_state.selected_dates]
+    state = calendar(events=events, options=cal_options, key="trip_cal_v6")
 
-    # FIXED CALENDAR LOGIC
-    if st.button("🔄 Sync/Toggle Selected Date", use_container_width=True):
-        raw_date = None
-        # Priority 1: DateClick
-        if state.get("dateClick"):
-            raw_date = state["dateClick"]["date"]
-        # Priority 2: Selection
-        elif state.get("select"):
-            raw_date = state["select"]["start"]
-            
+    if st.button("🔄 Sync Selected Date", use_container_width=True):
+        raw_date = state.get("dateClick", {}).get("date") or state.get("select", {}).get("start")
         if raw_date:
-            # THE FIX: We split the string at 'T' to get ONLY the date (YYYY-MM-DD) 
-            # and ignore any time-offset math.
             clean_date = raw_date.split("T")[0]
-            
             if clean_date in st.session_state.selected_dates:
                 st.session_state.selected_dates.remove(clean_date)
             else:
                 st.session_state.selected_dates.add(clean_date)
             st.rerun()
+    st.write(f"Confirmed: {len(st.session_state.selected_dates)} days")
 
-    if st.session_state.selected_dates:
-        sorted_dates = sorted(list(st.session_state.selected_dates))
-        st.write(f"**Confirmed:** {', '.join(sorted_dates)}")
-        if st.button("Clear Selection"):
-            st.session_state.selected_dates = set()
-            st.rerun()
-
-st.write("---")
 if st.button("🚀 Lock My Profile", type="primary", use_container_width=True):
     if name and st.session_state.selected_dates:
-        new_row = {
-            "Name": name, "Origin": origin, "Budget": budget, 
-            "Dates": ",".join(st.session_state.selected_dates), "No-Go": no_go
-        }
+        new_row = {"Name": name, "Origin": origin, "Budget": budget, "Dates": ",".join(st.session_state.selected_dates), "No-Go": no_go}
         new_row.update(vibe_scores)
         pd.DataFrame([new_row]).to_csv(DATA_FILE, mode='a', header=False, index=False)
         st.session_state.selected_dates = set()
-        st.balloons()
-        st.success("Profile Saved!")
-    else:
-        st.error("Missing Name or Dates!")
+        st.rerun()
 
-# --- SECTION 2: THE BRAIN ---
-st.header("🔐 Group Insights")
-if st.text_input("Group Password", type="password") == "nicolas2026":
+st.divider()
+
+# --- SECTION 2: THE AI ANALYST ---
+st.header("🔐 Section 2: Automated Group Strategy")
+
+if st.text_input("Admin Password", type="password") == "nicolas2026":
     df = pd.read_csv(DATA_FILE)
     if not df.empty:
-        t_vibe, t_dates, t_dest = st.tabs(["🏆 Strategy", "📅 Schedule", "📍 City Poll"])
+        # 1. CALCULATIONS
+        group_size = len(df)
+        min_budget = df['Budget'].min()
+        avg_budget = df['Budget'].mean()
+        winning_vibe = df[VIBE_OPTIONS].sum().idxmax()
         
-        with t_vibe:
-            group_scores = df[VIBE_OPTIONS].sum().sort_values(ascending=False)
-            st.subheader(f"Recommended Style: {group_scores.index[0]}")
-            st.bar_chart(group_scores)
+        # 2. AUTOMATED SUGGESTION LOGIC
+        def generate_suggestion(vibe, budget, dealbreakers):
+            v = vibe.split(" ")[0] # Get text without emoji
+            d = " ".join(str(x) for x in dealbreakers if str(x) != 'nan').lower()
             
-        with t_dates:
+            if "Nature" in v:
+                if budget < 400: return "🌲 Low-Budget Nature: Forest Cabin or Glamping (Avoid camping cars if mentioned)."
+                return "🌲 Premium Nature: High-end Eco-Lodge in the mountains or Dolomites."
+            elif "City" in v:
+                if budget < 500: return "🏙️ Budget City: Eastern European gems like Prague or Budapest."
+                return "🏙️ Premium City: Paris, London, or Tokyo (if dates allow)."
+            elif "Beach" in v:
+                if budget < 400: return "🏖️ Budget Beach: South of Spain or Portugal."
+                return "🏖️ Luxury Beach: Greek Islands or Amalfi Coast."
+            elif "Party" in v:
+                return "💃 High-Energy: Ibiza or Berlin, depending on flight origins."
+            return f"🌟 Dynamic Suggestion: Based on {v} vibe and €{budget} budget."
+
+        # 3. VISUALS & CONCLUSIONS
+        st.subheader("🤖 The Group AI Strategist")
+        
+        c1, c2 = st.columns([1.5, 1])
+        with c1:
+            suggestion = generate_suggestion(winning_vibe, min_budget, df['No-Go'].tolist())
+            st.info(f"### Final Verdict:\n**{suggestion}**")
+            
+            st.markdown(f"""
+            **Why this works?**
+            * The group's most inclusive budget is **€{min_budget}**.
+            * The consensus vibe is **{winning_vibe}**.
+            * We have automatically filtered out: *{", ".join(df['No-Go'].dropna())}*.
+            """)
+
+        with c2:
+            st.write("#### Preference Distribution")
+            group_scores = df[VIBE_OPTIONS].sum().sort_values()
+            fig = px.bar(group_scores, orientation='h', color_discrete_sequence=['#0047bb'])
+            st.plotly_chart(fig, use_container_width=True)
+
+        st.divider()
+        
+        # 4. DATA VISUALS
+        t_finance, t_overlap = st.tabs(["💰 Budget Analysis", "📅 Availability Heatmap"])
+        
+        with t_finance:
+            st.write("### Financial Strength")
+            fig_budget = px.box(df, y="Budget", points="all", title="Group Budget Range")
+            st.plotly_chart(fig_budget, use_container_width=True)
+            st.write(f"To keep everyone included, the total trip cost per person should not exceed **€{min_budget}**.")
+
+        with t_overlap:
             all_dates = []
             for d_str in df['Dates'].astype(str):
                 all_dates.extend(d_str.split(","))
             
             if all_dates:
-                counts = pd.Series(all_dates).value_counts().nlargest(10).sort_index()
-                st.write("### Most Popular Days")
-                st.line_chart(counts)
-                st.table(counts)
+                date_counts = pd.Series(all_dates).value_counts().sort_index()
+                st.write("### Peak Availability")
+                st.line_chart(date_counts)
+                
+                best_days = date_counts[date_counts == date_counts.max()].index.tolist()
+                st.success(f"The most people are free on: **{', '.join(best_days)}**")
 
-        with t_dest:
-            st.subheader("Suggest a Destination")
-            new_city = st.text_input("City Name (e.g., Tokyo)")
-            if st.button("Add Suggestion"):
-                if 'poll' not in st.session_state: st.session_state.poll = {}
-                if new_city: st.session_state.poll[new_city] = 0
-            
-            if 'poll' in st.session_state:
-                for city in st.session_state.poll:
-                    col_a, col_b = st.columns([3,1])
-                    col_a.write(f"**{city}**")
-                    if col_b.button("👍", key=city):
-                        st.session_state.poll[city] += 1
-                        st.rerun()
-                st.write(st.session_state.poll)
+    else:
+        st.info("Awaiting group input to generate strategy.")
