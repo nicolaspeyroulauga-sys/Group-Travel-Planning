@@ -2,47 +2,47 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import os
-import plotly.express as px
 from streamlit_calendar import calendar
 
 # --- CONFIG ---
-st.set_page_config(page_title="Consensus Global", layout="wide")
-DATA_FILE = "trip_data_v10.csv"
+st.set_page_config(page_title="Consensus Master", layout="wide")
+DATA_FILE = "trip_data_v11.csv"
 
-VIBE_OPTIONS = [
-    "City Break 🏙️", "Nature & Hiking 🌲", "Luxury & Spa 💎", 
-    "Party & Nightlife 💃", "Road Trip 🚗", "Ski & Snow ❄️", "Beach & Chill 🏖️"
-]
-
-# Coordinate Database for Realistic Logistics
+# Enhanced Coordinate Database
 CITY_COORDS = {
     "Toulouse": [43.60, 1.44], "Paris": [48.85, 2.35], "London": [51.50, -0.12],
     "Amsterdam": [52.36, 4.90], "Madrid": [40.41, -3.70], "Berlin": [52.52, 13.40],
     "Brussels": [50.85, 4.35], "Barcelona": [41.38, 2.17], "Rome": [41.90, 12.49],
-    "Lisbon": [38.72, -9.13], "Budapest": [47.49, 19.04], "Munich": [48.13, 11.58]
+    "Bordeaux": [44.83, -0.57], "Lyon": [45.76, 4.83]
 }
 
 if not os.path.exists(DATA_FILE):
-    cols = ["Name", "Origin", "Budget", "Dates", "No-Go"] + VIBE_OPTIONS
+    cols = ["Name", "Origin", "Budget", "Dates", "No-Go"] + [
+        "City Break 🏙️", "Nature & Hiking 🌲", "Luxury & Spa 💎", 
+        "Party & Nightlife 💃", "Road Trip 🚗", "Ski & Snow ❄️", "Beach & Chill 🏖️"
+    ]
     pd.DataFrame(columns=cols).to_csv(DATA_FILE, index=False)
 
 # --- SECTION 1: PROFILE (STAYS AS REQUESTED) ---
 if 'selected_dates' not in st.session_state:
     st.session_state.selected_dates = set()
 
-st.title("🌍 Consensus: Global Logistics Architect")
+st.title("🚗 Consensus: Logistics & Logic Engine")
 col_form, col_cal = st.columns([1, 1.2], gap="large")
 
 with col_form:
     with st.container(border=True):
         name = st.text_input("Name")
-        origin = st.text_input("Departure City (e.g. Amsterdam, Toulouse)")
+        origin = st.text_input("Departure City (e.g. Toulouse, Amsterdam)")
         budget = st.number_input("Max Budget (€)", min_value=0, value=600)
-        vibe_scores = {v: st.select_slider(f"{v}", options=[1, 2, 3, 4, 5], value=3) for v in VIBE_OPTIONS}
+        vibe_scores = {v: st.select_slider(v, options=[1, 2, 3, 4, 5], value=3) for v in [
+            "City Break 🏙️", "Nature & Hiking 🌲", "Luxury & Spa 💎", 
+            "Party & Nightlife 💃", "Road Trip 🚗", "Ski & Snow ❄️", "Beach & Chill 🏖️"
+        ]}
         no_go = st.text_input("Dealbreakers")
 
 with col_cal:
-    state = calendar(options={"initialView": "dayGridMonth", "selectable": True}, key="trip_cal_v10")
+    state = calendar(options={"initialView": "dayGridMonth", "selectable": True}, key="trip_cal_v11")
     if st.button("🔄 Sync Date"):
         raw_date = state.get("dateClick", {}).get("date") or state.get("select", {}).get("start")
         if raw_date:
@@ -69,84 +69,87 @@ st.divider()
 if st.text_input("Admin Password", type="password") == "nicolas2026":
     df = pd.read_csv(DATA_FILE)
     if not df.empty:
-        # 1. FIND THE WINNING DESTINATION & DATES
-        winning_vibe = df[VIBE_OPTIONS].sum().idxmax()
-        lowest_budget = float(df['Budget'].min())
-        all_dates = [d for sub in df['Dates'].astype(str) for d in sub.split(",")]
-        best_dates = pd.Series(all_dates).value_counts().idxmax()
+        # 1. CORE BRAIN: VIBE & DESTINATION
+        vibe_cols = [c for c in df.columns if any(emoji in c for emoji in ["🏙️", "🌲", "💎", "💃", "🚗", "❄️", "🏖️"])]
+        winning_vibe = df[vibe_cols].sum().idxmax()
+        is_road_trip = "Road Trip" in winning_vibe
+        
+        # Determine logical destination based on vibe
+        if "Beach" in winning_vibe: dest_name, dest_coords = "Costa Brava, Spain", [41.9, 3.2]
+        elif "Nature" in winning_vibe: dest_name, dest_coords = "Pyrenees National Park", [42.8, -0.1]
+        elif "Road Trip" in winning_vibe: dest_name, dest_coords = "The Basque Coast Loop", [43.4, -1.5]
+        else: dest_name, dest_coords = "Lyon, France", [45.7, 4.8]
 
-        # Destination Selection Logic
-        v = winning_vibe.lower()
-        if "nature" in v: 
-            dest_name, dest_coords = "Interlaken, Switzerland", [46.68, 7.85]
-            daily_cost = 100
-        elif "city" in v: 
-            dest_name, dest_coords = "Berlin, Germany", [52.52, 13.40]
-            daily_cost = 80
-        else: 
-            dest_name, dest_coords = "Barcelona, Spain", [41.38, 2.17]
-            daily_cost = 70
-
-        # 2. CALCULATION ENGINE: LOGISTICS PER PERSON
-        st.header(f"🏁 Final Master Plan: {dest_name}")
-        st.info(f"📅 **Group Arrival Date:** {best_dates} | 🎯 **Vibe:** {winning_vibe}")
-
-        itinerary_data = []
+        # 2. LOGISTICS ENGINE
+        st.header(f"🏁 Plan: {winning_vibe} in {dest_name}")
+        
+        itinerary = []
+        car_rental_total = 450.0 # SUV/Van for 4 days
+        fuel_and_tolls = 200.0
+        shared_car_cost = (car_rental_total + fuel_and_tolls) / len(df)
+        
         for i, row in df.iterrows():
             orig_name = str(row['Origin']).strip().title()
-            orig_coords = CITY_COORDS.get(orig_name, [48.85, 2.35]) # Default Paris
+            orig_coords = CITY_COORDS.get(orig_name, [48.8, 2.3])
             
-            # Distance math (Approximate)
+            # Distance to the destination
             dist = np.sqrt((orig_coords[0]-dest_coords[0])**2 + (orig_coords[1]-dest_coords[1])**2) * 111
             
-            if dist < 500:
-                mode = "🚆 High-Speed Train"
-                trans_cost = 85.0
+            if is_road_trip:
+                # Logic: If you're close enough (<400km), you drive your own car/join a car.
+                # If far, you take a train to the meeting point.
+                if dist < 400:
+                    mode = "🚗 Personal Car / Join Group Drive"
+                    transport_cost = 60.0 # Personal fuel share
+                else:
+                    mode = "🚆 Train to Meeting Point"
+                    transport_cost = 110.0
+                
+                total = transport_cost + shared_car_cost + (85.0 * 3) # transport + car share + 3 nights stay
             else:
-                mode = "✈️ Flight (Direct/Conn)"
-                trans_cost = 220.0 # Realistic 2026 Flight Pricing
-            
-            stay_cost = daily_cost * 3 # 3-night estimate
-            total = trans_cost + stay_cost
-            
-            itinerary_data.append({
-                "Traveler": row['Name'],
-                "From": orig_name,
-                "Mode": mode,
-                "Transport €": trans_cost,
-                "Total Est €": total,
-                "Status": "✅ OK" if total <= row['Budget'] else "❌ Over Budget"
+                # Standard flight/train logic
+                mode = "✈️ Flight" if dist > 500 else "🚆 Train"
+                transport_cost = 220.0 if dist > 500 else 90.0
+                total = transport_cost + (90.0 * 3)
+
+            itinerary.append({
+                "Traveler": row['Name'], "From": orig_name, "Method": mode,
+                "Transport €": transport_cost, "Shared Car €": shared_car_cost if is_road_trip else 0,
+                "Stay & Food €": 270.0, "Grand Total €": total,
+                "Budget Fit": "✅" if total <= row['Budget'] else "⚠️"
             })
 
-        # 3. DISPLAY RESULTS
-        res_df = pd.DataFrame(itinerary_data)
+        # 3. OUTPUT
+        res_df = pd.DataFrame(itinerary)
         st.table(res_df)
 
-        st.subheader("📝 Personalized Joining Instructions")
-        # Grouping by departure city for shared travel
-        origins = res_df.groupby("From")
-        for city, group in origins:
-            names = ", ".join(group['Traveler'].tolist())
-            mode = group['Mode'].iloc[0]
-            if len(group) > 1:
-                st.write(f"👥 **{names}**: You are both leaving from **{city}**. We suggest booking the **{mode}** together to save on airport transfers!")
+        st.subheader("📍 Personal Instructions & Route")
+        # Shared Departure Grouping
+        for city in res_df['From'].unique():
+            group = res_df[res_df['From'] == city]
+            names = " & ".join(group['Traveler'].tolist())
+            if is_road_trip:
+                if CITY_COORDS.get(city, [0,0])[0] < 45: # Example: If in South
+                    st.write(f"🚗 **{names}**: Since you are in **{city}**, you are the 'South Squad'. You should drive directly to the first stop in {dest_name}.")
+                else:
+                    st.write(f"🚆 **{names}**: From **{city}**, take the 09:00 train. The group will pick you up at the station in a rental van.")
             else:
-                st.write(f"👤 **{names}**: You are traveling solo from **{city}** via **{mode}**. Meet the group at {dest_name} Central Station/Airport.")
+                st.write(f"✈️ **{names}**: Book the morning flight from **{city}**. Use the shared shuttle to the hotel.")
 
-        # 4. MAP & TOTALS
+        # 4. PRICING BREAKDOWN
         st.write("---")
-        col_map, col_details = st.columns([1.5, 1])
-        with col_map:
-            # Map showing Origins and the Destination
-            map_df = pd.DataFrame([{"lat": CITY_COORDS.get(c, [48,2])[0], "lon": CITY_COORDS.get(c, [48,2])[1], "type": "Origin"} for c in res_df['From']])
-            map_df = pd.concat([map_df, pd.DataFrame([{"lat": dest_coords[0], "lon": dest_coords[1], "type": "Destination"}])])
-            fig_map = px.scatter_mapbox(map_df, lat="lat", lon="lon", color="type", zoom=3, mapbox_style="carto-positron")
-            st.plotly_chart(fig_map)
+        c1, c2 = st.columns(2)
+        with c1:
+            st.write("#### 💰 The Realistic Pot")
+            breakdown = {
+                "Shared Van Rental (4 Days)": "€450",
+                "Fuel & Highway Tolls": "€200",
+                "Average Accommodation": "€180/pp",
+                "Activities Fund": "€90/pp"
+            } if is_road_trip else {"Average Flight": "€220", "Hotel (3 Nights)": "€210", "Activities": "€100"}
+            st.json(breakdown)
 
-        with col_details:
-            st.write("#### 💰 Activity Breakdown")
-            st.write(f"**Activities in {dest_name}:**")
-            st.write("- 🎫 Group Museum/Nature Pass: €40")
-            st.write("- 🍽️ Shared Welcome Dinner: €45")
-            st.write("- 🚶 Professional Guided Tour: €25")
-            st.metric("Total Shared Activity Fund", "€110")
+        with c2:
+            st.write("#### 🗺️ The Map of Movements")
+            # Map logic showing origins and meeting hub
+            st.map(pd.DataFrame([{"lat": CITY_COORDS.get(c, [48,2])[0], "lon": CITY_COORDS.get(c, [48,2])[1]} for c in res_df['From']]))
