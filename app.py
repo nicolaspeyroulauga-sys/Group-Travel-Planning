@@ -5,9 +5,9 @@ import os
 import plotly.express as px
 from streamlit_calendar import calendar
 
-# --- CONFIG & DATA ---
+# --- CONFIG ---
 st.set_page_config(page_title="Consensus Travel", layout="wide")
-DATA_FILE = "trip_data_v7.csv"
+DATA_FILE = "trip_data_v9.csv"
 
 VIBE_OPTIONS = [
     "City Break 🏙️", "Nature & Hiking 🌲", "Luxury & Spa 💎", 
@@ -21,14 +21,14 @@ if not os.path.exists(DATA_FILE):
 if 'selected_dates' not in st.session_state:
     st.session_state.selected_dates = set()
 
-# --- SECTION 1: PROFILE (STATIC) ---
-st.title("🏛️ Consensus: Master Trip Architect")
+# --- SECTION 1: PROFILE ---
+st.title("🏛️ Consensus: Strategic Decision Engine")
 col_form, col_cal = st.columns([1, 1.2], gap="large")
 
 with col_form:
     with st.container(border=True):
         name = st.text_input("Name")
-        origin = st.text_input("Departure City (e.g. London, Paris)")
+        origin = st.text_input("Departure City (e.g. Toulouse, London)")
         budget = st.number_input("Max Budget (€)", min_value=0, value=500)
         vibe_scores = {v: st.select_slider(f"{v}", options=[1, 2, 3, 4, 5], value=3) for v in VIBE_OPTIONS}
         no_go = st.text_input("Dealbreakers")
@@ -36,7 +36,7 @@ with col_form:
 with col_cal:
     cal_options = {"initialView": "dayGridMonth", "selectable": True, "timeZone": "UTC"}
     events = [{"start": d, "end": d, "display": "background", "color": "#28a745"} for d in st.session_state.selected_dates]
-    state = calendar(events=events, options=cal_options, key="trip_cal_v7")
+    state = calendar(events=events, options=cal_options, key="trip_cal_v9")
     if st.button("🔄 Sync Date", use_container_width=True):
         raw_date = state.get("dateClick", {}).get("date") or state.get("select", {}).get("start")
         if raw_date:
@@ -51,77 +51,90 @@ if st.button("🚀 Lock My Profile", type="primary", use_container_width=True):
         new_row.update(vibe_scores)
         pd.DataFrame([new_row]).to_csv(DATA_FILE, mode='a', header=False, index=False)
         st.session_state.selected_dates = set()
-        st.rerun()
+        # SUCCESS MESSAGE AS REQUESTED
+        st.toast(f"✅ Profile locked in for {name}!", icon="🔒")
+        st.success(f"Profile locked in! Your data has been sent to the group analyst.")
+    else:
+        st.error("Missing Name or Dates!")
 
 st.divider()
 
-# --- SECTION 2: THE ARCHITECT (ADMIN) ---
-st.header("🔐 Section 2: The Master Blueprint")
-
+# --- SECTION 2: THE BRAIN ---
 if st.text_input("Admin Password", type="password") == "nicolas2026":
     df = pd.read_csv(DATA_FILE)
     if not df.empty:
-        # 1. CORE BRAIN CALCULATIONS
-        winning_vibe = df[VIBE_OPTIONS].sum().idxmax()
-        min_budget = df['Budget'].min()
-        origins = df['Origin'].unique().tolist()
+        # --- LOGIC 1: DATE OVERLAP ENGINE ---
+        all_dates = []
+        for d_str in df['Dates'].astype(str):
+            all_dates.extend(d_str.split(","))
         
-        # 2. THE BLUEPRINT ENGINE
-        def get_blueprint(vibe, budget):
-            # Logic to generate destination + activities + breakdown
+        date_series = pd.Series(all_dates).value_counts()
+        max_votes = date_series.max()
+        best_dates = date_series[date_series == max_votes].index.tolist()
+        best_dates.sort()
+
+        # --- LOGIC 2: BUDGET & VIBE ENGINE ---
+        winning_vibe = df[VIBE_OPTIONS].sum().idxmax()
+        lowest_budget = float(df['Budget'].min())
+
+        def get_smart_recommendation(vibe, budget):
             v = vibe.split(" ")[0]
-            if "City" in v:
-                dest = "Budapest, Hungary" if budget < 500 else "Tokyo, Japan"
-                acts = ["Ruin Bar Crawl", "Thermal Baths", "Parliament Visit"]
-                breakdown = {"Flight": 150, "Lodging": 150, "Food/Fun": 150}
-            elif "Nature" in v:
-                dest = "Zakopane, Poland" if budget < 400 else "Interlaken, Switzerland"
-                acts = ["Alpine Hiking", "Lake Kayaking", "Local Cheese Tasting"]
-                breakdown = {"Flight": 120, "Lodging": 180, "Food/Fun": 100}
-            else:
-                dest = "Algarve, Portugal"
-                acts = ["Beach Club", "Surfing Lesson", "Seafood Dinner"]
-                breakdown = {"Flight": 100, "Lodging": 200, "Food/Fun": 150}
+            # Realistic Data Mapping
+            options = {
+                "City": {"low": ("Budapest", ["Szechenyi Baths", "Jewish Quarter Walk", "Ruin Bars"]), 
+                         "mid": ("Berlin", ["East Side Gallery", "Brandenburg Gate", "Techno Club"])},
+                "Nature": {"low": ("High Tatras, Slovakia", ["Lake Strbske Pleso", "Mountain Hut Hike", "Waterfall Trail"]),
+                           "mid": ("Chamonix, France", ["Aiguille du Midi", "Mer de Glace", "Paragliding"])},
+                "Beach": {"low": ("Sarandë, Albania", ["Ksamil Islands", "Blue Eye Spring", "Lekuresi Castle"]),
+                          "mid": ("Lagos, Portugal", ["Ponta da Piedade", "Kayak Caves", "Old Town Fish Dinner"])}
+            }
             
+            key = "City" if "City" in v else ("Nature" if "Nature" in v else "Beach")
+            tier = "low" if budget < 400 else "mid"
+            dest, acts = options.get(key, options["City"])[tier]
+            
+            # Realistic Pricing Breakdown
+            breakdown = {
+                "Round-trip Flight": budget * 0.25,
+                "Accommodation (3 nights)": budget * 0.35,
+                "Food & Local Transport": budget * 0.25,
+                "Activities & Misc": budget * 0.15
+            }
             return dest, acts, breakdown
 
-        dest, activities, costs = get_blueprint(winning_vibe, min_budget)
-        total_est = sum(costs.values())
+        dest, activities, costs = get_smart_recommendation(winning_vibe, lowest_budget)
 
-        # 3. VISUALS
-        col_main, col_map = st.columns([1, 1])
+        # --- DISPLAY ---
+        st.header("🏁 The Final Consensus")
         
-        with col_main:
-            st.success(f"### 📍 Target Destination: {dest}")
-            st.info(f"**Recommended Trip Style:** {winning_vibe}")
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            st.info(f"### 📅 Best Dates: **{', '.join(best_dates)}**")
+            st.write(f"*(Selected because {max_votes} out of {len(df)} people are free)*")
             
-            st.write("#### 🗓️ The Itinerary Suggestion")
+            st.success(f"### 📍 Destination: **{dest}**")
+            st.write(f"**Top Recommended Activities:**")
             for a in activities:
-                st.write(f"✅ {a}")
-            
-            st.write("#### 💰 Cost Breakdown (Per Person)")
-            cost_df = pd.DataFrame.from_dict(costs, orient='index', columns=['Est. Price (€)'])
-            st.table(cost_df)
-            st.metric("Total Estimated Cost", f"€{total_est}", delta=f"€{min_budget - total_est} under limit")
+                st.write(f"🌟 {a}")
 
-        with col_map:
-            st.write("#### ✈️ Departure Network")
-            # Mock coordinate mapping for common European cities (to avoid heavy Geocoder libs)
-            mock_coords = {"London": [51.5, -0.1], "Paris": [48.8, 2.3], "Madrid": [40.4, -3.7], "Berlin": [52.5, 13.4], "Rome": [41.9, 12.4], "Brussels": [50.8, 4.3]}
-            map_data = []
-            for city in origins:
-                coord = mock_coords.get(city, [48.8, 2.3]) # Default to Paris if unknown
-                map_data.append({"City": city, "lat": coord[0], "lon": coord[1]})
-            
-            st.map(pd.DataFrame(map_data))
-            st.caption("Map shows current group departure points.")
+        with c2:
+            st.write("#### 💰 Realistic Price Breakdown")
+            price_df = pd.DataFrame.from_dict(costs, orient='index', columns=['Price (€)'])
+            st.table(price_df.style.format("€{:.2f}"))
+            st.metric("Total Estimated Package", f"€{sum(costs.values()):.2f}")
 
-        # 4. FINAL CONCLUSION
+        # --- MAP ---
+        st.write("---")
+        city_coords = {"Toulouse": [43.60, 1.44], "Paris": [48.85, 2.35], "London": [51.50, -0.12], "Madrid": [40.41, -3.70]}
+        map_points = []
+        for city in df['Origin'].unique():
+            clean = str(city).strip().title()
+            if clean in city_coords: map_points.append({"lat": city_coords[clean][0], "lon": city_coords[clean][1]})
+        if map_points:
+            st.write("#### 🗺️ Group Origins")
+            st.map(pd.DataFrame(map_points))
+
         st.divider()
-        st.subheader("💡 Final Conclusion")
-        st.write(f"Based on **{len(df)} travelers**, the best move is a **{winning_vibe}** in **{dest}**. "
-                 f"This is the most 'inclusive' choice because the total cost (€{total_est}) fits everyone's budget, "
-                 f"including those with the €{min_budget} limit. We avoid: {', '.join(df['No-Go'].dropna().unique())}.")
-
-    else:
-        st.info("Awaiting group data...")
+        st.subheader("💡 Analysis Summary")
+        st.write(f"The group chose **{winning_vibe}**. To ensure everyone (especially those with a **€{lowest_budget}** budget) can attend, the AI suggests **{dest}**. "
+                 f"The most compatible time to fly is **{best_dates[0]}**.")
